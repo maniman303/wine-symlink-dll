@@ -158,16 +158,6 @@ WIN_DLL_API(bool) ConvertWindowsPath(const char* pathC, char* buffer, int buffer
     return false;
 }
 
-WIN_DLL_API(int) MyFunction()
-{
-    return 6;
-}
-
-WIN_DLL_API(int) AddNumbers(int a, int b)
-{
-    return a + b;
-}
-
 WIN_DLL_API(void) Test()
 {
     auto windowsPath = "";
