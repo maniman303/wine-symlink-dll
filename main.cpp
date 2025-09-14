@@ -4,6 +4,10 @@
 #include <linux/limits.h>
 #include <vector>
 #include <algorithm>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <queue>
+#include <dirent.h>
 
 #define WIN_DLL_API(ret) extern "C" ret WINAPI
 
@@ -156,6 +160,126 @@ WIN_DLL_API(bool) ConvertWindowsPath(const char* pathC, char* buffer, int buffer
     buffer[bufferSize - 1] = '\0';
 
     return false;
+}
+
+int GetPathSymlinkStatus(std:: string path)
+{
+    struct stat buf;
+    int res = lstat(path.c_str(), &buf);
+
+    if (res != 0)
+    {
+        return -1;
+    }
+    
+    if (S_ISLNK(buf.st_mode))
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+WIN_DLL_API(bool) IsWindowsPathSymlink(const char* pathC)
+{
+    auto unixPath = ConvertWindowsPathToStr(pathC);
+
+    return GetPathSymlinkStatus(unixPath) > 0;
+}
+
+void RecursivelyRemoveDirectory(std::string path)
+{
+    struct stat buf;
+    std::queue<std::string> dirsToCheck;
+    std::deque<std::string> dirsToRemove;
+
+    dirsToCheck.push(path);
+    dirsToRemove.push_front(path);
+
+    while (!dirsToCheck.empty())
+    {
+        auto dirPath = dirsToCheck.front();
+        dirsToCheck.pop();
+
+        struct dirent *ent;
+        DIR *dir = opendir (dirPath.c_str());
+        if (!dir)
+        {
+            // Could not open dir
+            continue;
+        }
+
+        while ((ent = readdir (dir)) != NULL)
+        {
+            auto entPath = std::string(ent->d_name);
+            if (entPath == "." || entPath == "..")
+            {
+                continue;
+            }
+
+            entPath = dirPath + "/" + entPath;
+            int res = lstat (entPath.c_str(), &buf);
+            if (res != 0)
+            {
+                continue;
+            }
+            else if (S_ISLNK(buf.st_mode) || !S_ISDIR(buf.st_mode))
+            {
+                unlink(entPath.c_str());
+            }
+            else if (S_ISDIR(buf.st_mode))
+            {
+                dirsToCheck.push(entPath);
+                dirsToRemove.push_front(entPath);
+            }
+        }
+
+        closedir (dir);
+    }
+
+    while (!dirsToRemove.empty())
+    {
+        auto dirPath = dirsToRemove.front();
+        dirsToRemove.pop_front();
+
+        rmdir(dirPath.c_str());
+    }
+}
+
+WIN_DLL_API(bool) DeleteWindowsPath(const char* pathC)
+{
+    auto unixPath = ConvertWindowsPathToStr(pathC);
+    struct stat buf;
+    int res = lstat(unixPath.c_str(), &buf);
+
+    if (res != 0)
+    {
+        return false;
+    }
+    else if (S_ISLNK(buf.st_mode) || !S_ISDIR(buf.st_mode))
+    {
+        unlink(unixPath.c_str());
+        return true;
+    }
+
+    RecursivelyRemoveDirectory(unixPath);
+
+    return true;
+}
+
+WIN_DLL_API(bool) CreateWindowsSymlink(const char* pathSourceC, const char* pathDestinationC)
+{
+    auto unixSourcePath = ConvertWindowsPathToStr(pathSourceC);
+    auto unixDestinationPath = ConvertWindowsPathToStr(pathDestinationC);
+
+    if (unixSourcePath.empty() || unixDestinationPath.empty())
+    {
+        return false;
+    }
+
+    auto res = symlink(unixSourcePath.c_str(), unixDestinationPath.c_str());
+
+    return res == 0;
 }
 
 WIN_DLL_API(void) Test()

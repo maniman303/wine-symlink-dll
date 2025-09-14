@@ -1,2 +1,5 @@
 @ stdcall ConvertWindowsPath(str ptr long)
+@ stdcall IsWindowsPathSymlink(str)
+@ stdcall DeleteWindowsPath(str)
+@ stdcall CreateWindowsSymlink(str str)
 @ stdcall Test()
